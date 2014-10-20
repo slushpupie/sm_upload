@@ -357,7 +357,6 @@ opts.each do |opt,arg|
 		exit
 	when '--update-cache'
 		print "Updating cache. Please be patient\n"
-		update_cache
 	when '--no-upload'
 		$do_uploads = false
 	when '--no-albums'
@@ -365,6 +364,7 @@ opts.each do |opt,arg|
 	end
 end
 
+update_cache
 
 Find.find('Categories') do |file|
 	skip = false
