@@ -53,10 +53,10 @@ def get_creds
 		@consumer=OAuth::Consumer.new api_key, 
 		                              oauth_secret, 
 		                              {
-		                              		:site=>"http://smugmug.com",
-		                              		:request_token_path => "http://api.smugmug.com/services/oauth/getRequestToken.mg",
-		                              		:access_token_path => "http://api.smugmug.com/services/oauth/getAccessToken.mg",
-		                              		:authorize_path => "http://api.smugmug.com/services/oauth/authorize.mg"
+		                              		:site=>"https://api.smugmug.com",
+		                              		:request_token_path => "/services/oauth/getRequestToken.mg",
+		                              		:access_token_path => "/services/oauth/getAccessToken.mg",
+		                              		:authorize_path => "/services/oauth/authorize.mg"
 		                              }
 
 		@request_token = @consumer.get_request_token                              
@@ -71,7 +71,7 @@ def get_creds
 		token = @access_token.token
 		secret = @access_token.secret
 
-		File.write(File.expand_path("~/.sm_upload"), [api_key, oauth_secret, token, secret].to_yaml)
+		File.write(".sm_upload", [api_key, oauth_secret, token, secret].to_yaml)
 	end
 
 	return [api_key, oauth_secret, token, secret]
