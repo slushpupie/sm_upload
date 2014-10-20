@@ -198,7 +198,7 @@ def upload_image(album_id, file)
 end
 
 
-def update_cache
+def update_cache(force_all=false)
 
 	$db.transaction
 
@@ -216,8 +216,18 @@ def update_cache
 		$db.execute("INSERT INTO subcategories (id,name,category_id) VALUES (?,?,?)",subcat["id"],subcat["Name"],subcat["Category"]["id"])
 	}
 
+	if(force_all)
+		lastUpdated = 0
+	else
+		row = $db.execute("SELECT last_changed FROM albums ORDER BY last_changed DESC LIMIT 1");
+	    if row.length == 1
+	        lastUpdated = DateTime.parse(row[0][0]).strftime("%s")
+	    end
+	end
+
+
 	debug_print("Updating albums")
-	albums = $client.albums.get
+	albums = $client.albums.get(:LastUpdated=>lastUpdated)
 
 	albums.each { |album|
 
@@ -253,7 +263,7 @@ def update_cache
 			return
 		end
 
-		if update_required
+		if force_all || update_required
 			print "Updating #{name} cache"
 			$db.execute("DELETE FROM images WHERE album_id = ?",id)
 			
