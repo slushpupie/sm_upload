@@ -350,6 +350,7 @@ opts = GetoptLong.new(
 	[ '--no-albums',    '-a', GetoptLong::NO_ARGUMENT]
 	)
 
+force_cache_update=false
 opts.each do |opt,arg|
 	case opt
 	when '--help'
@@ -357,6 +358,7 @@ opts.each do |opt,arg|
 		exit
 	when '--update-cache'
 		print "Updating cache. Please be patient\n"
+		force_cache_update=true
 	when '--no-upload'
 		$do_uploads = false
 	when '--no-albums'
@@ -364,7 +366,7 @@ opts.each do |opt,arg|
 	end
 end
 
-update_cache
+update_cache(force_cache_update)
 
 Find.find('Categories') do |file|
 	skip = false
