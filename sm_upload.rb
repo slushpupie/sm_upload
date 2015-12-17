@@ -47,11 +47,15 @@ end
 
 def get_creds
 
-	api_key, oauth_secret, token, secret = YAML.load_file(".sm_upload")
+	config = YAML.load_file(".sm_upload")
+	api_key = config['key']
+	oauth_secret = config['secret']
+	token = config['token']
+	secret = config['token_secret']
 
 	if token == nil || secret == nil
-		@consumer=OAuth::Consumer.new api_key, 
-		                              oauth_secret, 
+		@consumer=OAuth::Consumer.new api_key,
+		                              oauth_secret,
 		                              {
 		                              		:site=>"https://api.smugmug.com",
 		                              		:request_token_path => "/services/oauth/getRequestToken.mg",
@@ -59,14 +63,14 @@ def get_creds
 		                              		:authorize_path => "/services/oauth/authorize.mg"
 		                              }
 
-		@request_token = @consumer.get_request_token                              
+		@request_token = @consumer.get_request_token
 
 		puts "Visit the following URL, log in if you need to, and authorize the app"
 		puts @request_token.authorize_url
 		puts "When you've authorized that token, enter the verifier code you are assigned (if any):"
-		verifier = gets.strip                                                                    
+		verifier = gets.strip
 
-		@access_token=@request_token.get_access_token(:oauth_verifier => verifier)         
+		@access_token=@request_token.get_access_token(:oauth_verifier => verifier)
 
 		token = @access_token.token
 		secret = @access_token.secret
@@ -185,14 +189,15 @@ def upload_image(album_id, file)
 	if $do_uploads
 		image = $client.upload_media(:file => File.new(file), :AlbumID => album_id)
 		#image = {"id" => -1, "Key" => "deadbeef", "FileName" => file}
-	
+
 		if image==nil || image["id"] == nil
 			print "  Upload failed.\n"
 		else
 			# update cache
 			rows = $db.execute("INSERT INTO images (id,key,filename,album_id) VALUES (?,?,?,?)",image["id"],image["Key"],image["FileName"],album_id)
 		end
-
+        else
+          print "Not uploading #{file}\n"
 	end
 
 end
@@ -266,7 +271,7 @@ def update_cache(force_all=false)
 		if force_all || update_required
 			print "Updating #{name} cache"
 			$db.execute("DELETE FROM images WHERE album_id = ?",id)
-			
+
 			data = $client.images.get(:AlbumID=>id,:AlbumKey=>key,:Heavy=>true)
 			images = data["Images"]
 			images.each { |image|
@@ -291,7 +296,7 @@ end
 
 
 def debug
-	$categories.each{ |category| 
+	$categories.each{ |category|
 		print "c:#{category["Name"]} (#{category["id"]})\n"
 		$subcats.each { |subcat|
 			next if not subcat["Category"]["id"] == category["id"]
@@ -387,7 +392,7 @@ Find.find('Categories') do |file|
 
 	# Skip hidden dirs
 	hidden = false
-	album.split("/").each{ |dir| 
+	album.split("/").each{ |dir|
 		if dir.start_with?(".")
 			hidden = true
 			break
@@ -412,13 +417,13 @@ Find.find('Categories') do |file|
 		exit 1
 	end
 
-	
+
 	if not image_exist?(album_id,album_key,image)
 		print "#{album}/#{image}\n"
 		upload_image(album_id,file)
         else
 		print "#E#{album}/#{image}\n"
-                
+
 	end
 
 
