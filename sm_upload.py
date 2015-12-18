@@ -8,12 +8,15 @@ from urllib import urlencode
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
 
-session
+known_types = [".jpg", ".jpeg", ".gif", ".png"]
+#session
+
 def main():
     """This example interacts with its user through the console, but it is
     similar in principle to the way any non-web-based application can obtain an
     OAuth authorization from a user."""
 
+    global session
     service = get_service()
 
     t = load_tokens()
@@ -61,13 +64,47 @@ def main():
     if not node:
         userObj = session.get(API_ORIGIN + '/api/v2/user/slushpupie',
                 headers={'Accept': 'application/json'}).json()
-        nodeUri = userObj['Response']['User']['Uris']['Node']['Uri'])
+        nodeUri = userObj['Response']['User']['Uris']['Node']['Uri']
         node = getRemoteNode(nodeUri)
         saveLocalNode('.',node)
 
+    for root, dirs, files in os.walk('Categories'):
+        for f in files:
+            _ignore, ext = os.path.splitext(f)
+            if ext.lower() in known_types:
+                if not image_exist(root,f):
+                    image_upload(root,f)
 
-def image_exist(node,image_name):
-    
+
+def image_upload(folder,image_name):
+    node = getNode(folder)
+    print "Would upload %s into %s (%s)" % (image_name, folder, node['key'])
+
+def image_exist(folder,image_name):
+    global session
+    node = getNode(folder)
+
+    if node['images'][image_name]:
+        return True
+
+    next_page = '/api/v2/album/%s!images?start=1&count=100' % (node['key'])
+    while next_page:
+        page = session.get(API_ORIGIN + next_page,
+            headers={'Accept': 'application/json'}).json()
+        next_page = page['Response']['Pages']['NextPage']
+        images = page['Response']['AlbumImage']
+        for image in images:
+            if image['FileName'] == image_name:
+                node['images'][image_name]['key'] = image['ImageKey']
+                node['images'][image_name]['uri'] = image['Uri']
+                saveLocalNode(folder,node)
+                return True
+
+    return False
+
+
+
+
 
 def getNode(folder):
     node = getLocalNode(folder)
@@ -81,9 +118,12 @@ def getNode(folder):
     return None
 
 def getRemoteNode(folder):
+    global session
+
     results = session.get(API_ORIGIN + '/api/v2/user/slushpupie!urlpathlookup?urlpath=/' + folder,
             headers={'Accept': 'application/json'}).json()
 
+    pp.pprint(results)
     if results['Response']['Locator'] == 'Folder':
         node = {'id': nodeObj['Response']['Node']['NodeID'],
              'uri': nodeObj['Response']['Node']['Uri'],
@@ -103,8 +143,9 @@ def saveLocalNode(folder,node):
         fh.write(yaml.dump(config))
 
 def getLocalNode(folder):
-    with open(folder + '/.sm_node', 'r') as fh:
-        return = yaml.load(fh)
+    try:
+        with open(folder + '/.sm_node', 'r') as fh:
+            return yaml.load(fh)
     except IOError as e:
         return None
 

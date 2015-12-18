@@ -2,7 +2,8 @@ import json
 import yaml
 from rauth import OAuth1Service
 import sys
-from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+from urllib import urlencode
+from urlparse import parse_qsl, urlsplit, urlunsplit, parse_qsl
 
 OAUTH_ORIGIN = 'https://secure.smugmug.com'
 REQUEST_TOKEN_URL = OAUTH_ORIGIN + '/services/oauth/1.0a/getRequestToken'
