@@ -1,13 +1,39 @@
 #!/usr/bin/env python
-from rauth import OAuth1Session
-import sys
 
-from common import API_ORIGIN, get_service, add_auth_params, load_tokens, save_tokens
-from urllib import urlencode
+#from rauth import OAuth1Session
+import requests
+import logging
+#from requests_oauthlib import OAuth1Session
+
+import sys, os
+
+from common import SmugMugSession
+
+from urllib import urlencode, quote, quote_plus
 
 import pprint
+
+import yaml, json
 pp = pprint.PrettyPrinter(indent=4)
 
+# These two lines enable debugging at httplib level (requests->urllib3->http.client)
+# You will see the REQUEST, including HEADERS and DATA, and RESPONSE with HEADERS but without DATA.
+# The only thing missing will be the response.body which is not logged.
+# try:
+#     import http.client as http_client
+# except ImportError:
+#     # Python 2
+#     import httplib as http_client
+# http_client.HTTPConnection.debuglevel = 1
+
+# You must initialize logging, otherwise you'll not see debug output.
+# logging.basicConfig()
+# logging.getLogger().setLevel(logging.DEBUG)
+# requests_log = logging.getLogger("requests.packages.urllib3")
+# requests_log.setLevel(logging.DEBUG)
+# requests_log.propagate = True
+
+API_ORIGIN = SmugMugSession.API_ORIGIN
 known_types = [".jpg", ".jpeg", ".gif", ".png"]
 #session
 
@@ -15,98 +41,177 @@ def main():
     """This example interacts with its user through the console, but it is
     similar in principle to the way any non-web-based application can obtain an
     OAuth authorization from a user."""
-
     global session
-    service = get_service()
+    sm_session = SmugMugSession()
+    session = sm_session.get_session()
 
-    t = load_tokens()
-    at = t['token']
-    ats = t['token_secret']
-
-    if at == None or ats == None:
-
-        # First, we need a request token and secret, which SmugMug will give us.
-        # We are specifying "oob" (out-of-band) as the callback because we don't
-        # have a website for SmugMug to call back to.
-        rt, rts = service.get_request_token(params={'oauth_callback': 'oob'})
-
-        # Second, we need to give the user the web URL where they can authorize our
-        # application.
-        auth_url = add_auth_params(
-                service.get_authorize_url(rt), access='Full', permissions='Modify')
-        print('Go to %s in a web browser.' % auth_url)
-
-        # Once the user has authorized our application, they will be given a
-        # six-digit verifier code. Our third step is to ask the user to enter that
-        # code:
-        sys.stdout.write('Enter the six-digit code: ')
-        sys.stdout.flush()
-        verifier = sys.stdin.readline().strip()
-
-        # Finally, we can use the verifier code, along with the request token and
-        # secret, to sign a request for an access token.
-        at, ats = service.get_access_token(rt, rts, params={'oauth_verifier': verifier})
-
-        # The access token we have received is valid forever, unless the user
-        # revokes it.  Let's make one example API request to show that the access
-        # token works.
-        print('Access token: %s' % at)
-        print('Access token secret: %s' % ats)
-        save_tokens(at,ats)
-
-    session = OAuth1Session(
-            service.consumer_key,
-            service.consumer_secret,
-            access_token=at,
-            access_token_secret=ats)
 
     node = getLocalNode('.')
     if not node:
-        userObj = session.get(API_ORIGIN + '/api/v2/user/slushpupie',
-                headers={'Accept': 'application/json'}).json()
-        nodeUri = userObj['Response']['User']['Uris']['Node']['Uri']
-        node = getRemoteNode(nodeUri)
+        #userObj = session.get(API_ORIGIN + '/api/v2/user/slushpupie',
+        #        headers={'Accept': 'application/json'}).json()
+        #nodeUri = userObj['Response']['User']['Uris']['Node']['Uri']
+        node = getRemoteNode('')
         saveLocalNode('.',node)
 
-    for root, dirs, files in os.walk('Categories'):
+    for root, dirs, files in os.walk('Photos'):
+        r = root[6:]
+        node = getNode(r)
+        if not node:
+            if len(files) > 0 and len(dirs) > 0:
+                print "You cant have directories with Images and Folders (%s)" % root
+            elif len(files) > 0:
+                create_album(r)
+            elif len(dirs) > 0:
+                create_folder(r)
+            else:
+                print "Skipping empty directory "+r
+
         for f in files:
             _ignore, ext = os.path.splitext(f)
             if ext.lower() in known_types:
-                if not image_exist(root,f):
-                    image_upload(root,f)
+                if not image_exist(r,f):
+                    image_upload(r,f)
 
 
 def image_upload(folder,image_name):
+    global session
+
     node = getNode(folder)
-    print "Would upload %s into %s (%s)" % (image_name, folder, node['key'])
+    if not node:
+        print "Folder %s not registered in SmugMug yet, what happened?" % (folder)
+        return False
+
+    file = {'file': open('Photos/'+folder+'/'+image_name, 'rb')}
+    print "Uploading %s into %s (%s)" % (image_name, folder, node['key'])
+    response = session.post('http://upload.smugmug.com/',
+        headers={'X-Smug-AlbumUri': '/api/v2/album/%s' % (node['key']),
+              'X-Smug-ResponseType': 'JSON',
+              'X-Smug-Version': 'v2',
+              'X-Smug-FileName': image_name},
+        files=file).json()
+    if response['stat'] == 'ok':
+        image_exist(folder,image_name)
+        return True
+    print "Error on upload"
+    pp.pprint(response)
 
 def image_exist(folder,image_name):
     global session
     node = getNode(folder)
 
-    if node['images'][image_name]:
+    if not node:
+        print "Folder %s not registered in SmugMug yet, what happened?" % (folder)
+        return False
+
+    if 'images' in node and node['images'] and node['images'].get(image_name, False):
         return True
 
     next_page = '/api/v2/album/%s!images?start=1&count=100' % (node['key'])
     while next_page:
         page = session.get(API_ORIGIN + next_page,
             headers={'Accept': 'application/json'}).json()
-        next_page = page['Response']['Pages']['NextPage']
+
+        if 'Pages' not in page['Response']:
+            return False
+        next_page = page['Response']['Pages'].get('NextPage', None)
         images = page['Response']['AlbumImage']
         for image in images:
             if image['FileName'] == image_name:
-                node['images'][image_name]['key'] = image['ImageKey']
-                node['images'][image_name]['uri'] = image['Uri']
+                i = {
+                    'key': image['ImageKey'],
+                    'uri': image['Uri']
+                }
+                node['images'][image_name] = i
                 saveLocalNode(folder,node)
                 return True
 
+    return False
+
+def parent(folder):
+    if not folder:
+        return ''
+    return '/'.join(folder.split('/')[:-1])
+
+def base_name(folder):
+    if not folder:
+        return ''
+    return folder.split('/')[-1]
+
+def create_folder(folder):
+    global session
+
+
+    if not folder:
+        return False
+
+    node = getNode(folder)
+    if node:
+        return node
+
+    fname = base_name(folder)
+    pnode = create_folder(parent(folder))
+    if pnode:
+        print "Would create folder %s in node %s (%s)" % ( fname, pnode['id'], folder )
+
+        response = session.post(API_ORIGIN + "/api/v2/node/%s!children" % (pnode['id']),
+            headers={'Accept': 'application/json',
+                  'Content-Type': 'application/json'},
+            data=json.dumps({'Type': 'Folder', 'Name': fname, 'UrlName': fname})).json()
+
+        if response['Response']['EndpointType'] == 'Node':
+            node = { 'id': response['Response']['Node']['NodeID'],
+                  'type': 'Folder'}
+            saveLocalNode(folder,node)
+            return node
+
+    print "Something went wrong; cant create folder-node %s" % (folder)
     return False
 
 
 
 
 
+
+def create_album(folder):
+    global session
+
+    if not folder:
+        return False
+
+    node = getNode(folder)
+    if node and node['Type'] == 'Album':
+        return node
+    if node:
+        print "%s was already created, but not as an Album. Cannot convert"
+        return False
+
+
+    fname = base_name(folder)
+    pnode = create_folder(parent(folder))
+    if pnode:
+        print "Would create album %s in node %s (%s)" % ( fname, pnode['id'], folder )
+
+        response = session.post(API_ORIGIN + "/api/v2/node/%s!children" % (pnode['id']),
+            headers={'Accept': 'application/json',
+                  'Content-Type': 'application/json'},
+            data=json.dumps({'Type': 'Album', 'Name': fname, 'UrlName': fname})).json()
+
+        if response['Response']['EndpointType'] == 'Node':
+            node = { 'id': response['Response']['Node']['NodeID'],
+                  'type': 'Album',
+                  'key': base_name(response['Response']['Node']['Uris']['Album']['Uri']),
+                  'images': {}}
+            saveLocalNode(folder,node)
+            return node
+
+    print "Something went wrong; cant create album-node %s" % (folder)
+    return False
+
+
 def getNode(folder):
+    if folder == "":
+        folder = "/"
     node = getLocalNode(folder)
     if node:
         return node
@@ -120,31 +225,30 @@ def getNode(folder):
 def getRemoteNode(folder):
     global session
 
-    results = session.get(API_ORIGIN + '/api/v2/user/slushpupie!urlpathlookup?urlpath=/' + folder,
-            headers={'Accept': 'application/json'}).json()
+    results = session.get('%s/api/v2/user/slushpupie!urlpathlookup?urlpath=%s' % (API_ORIGIN, quote_plus(folder)),
+        headers={'Accept': 'application/json'}).json()
 
-    pp.pprint(results)
+    #pp.pprint(results)
     if results['Response']['Locator'] == 'Folder':
-        node = {'id': nodeObj['Response']['Node']['NodeID'],
-             'uri': nodeObj['Response']['Node']['Uri'],
-             'type': nodeObj['Response']['Node']['Type']}
+        node = {'id': results['Response']['Folder']['NodeID'],
+             'type': 'Folder'}
     elif results['Response']['Locator'] == 'Album':
-        node = {'id': nodeObj['Response']['Node']['NodeID'],
-             'uri': nodeObj['Response']['Node']['Uri'],
-             'type': nodeObj['Response']['Node']['Type'],
-             'key': nodeObj['Response']['Album']['AlbumKey']}
+        node = {'id': results['Response']['Album']['NodeID'],
+             'type': 'Album',
+             'key': results['Response']['Album']['AlbumKey'],
+             'images': {}}
     else:
         node = None
 
     return node
 
 def saveLocalNode(folder,node):
-    with open(folder + '/.sm_node', 'w') as fh:
-        fh.write(yaml.dump(config))
+    with open('Photos/' + folder + '/.sm_node', 'w') as fh:
+        fh.write(yaml.dump(node, default_flow_style=False))
 
 def getLocalNode(folder):
     try:
-        with open(folder + '/.sm_node', 'r') as fh:
+        with open('Photos/' + folder + '/.sm_node', 'r') as fh:
             return yaml.load(fh)
     except IOError as e:
         return None
