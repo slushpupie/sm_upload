@@ -82,10 +82,11 @@ def main(dryrun):
         for f in files:
             _ignore, ext = os.path.splitext(f)
             if ext.lower() in known_types:
-                if dryrun:
-                    print "Would upload image %s into %s, but in dryrun mode" % (f,r)
-                else:
-                    if not image_exist(r,f):
+
+                if not image_exist(r,f):
+                    if dryrun:
+                        print "Would upload image %s into %s, but in dryrun mode" % (f,r)
+                    else:
                         if not image_upload(r,f):
                             print "Error uploading"
 
