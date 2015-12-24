@@ -7,6 +7,8 @@ import logging
 
 import sys, os
 
+import argparse
+
 from common import SmugMugSession
 
 from urllib import urlencode, quote, quote_plus
@@ -37,7 +39,7 @@ API_ORIGIN = SmugMugSession.API_ORIGIN
 known_types = [".jpg", ".jpeg", ".gif", ".png"]
 #session
 
-def main():
+def main(dryrun):
     """This example interacts with its user through the console, but it is
     similar in principle to the way any non-web-based application can obtain an
     OAuth authorization from a user."""
@@ -45,33 +47,47 @@ def main():
     sm_session = SmugMugSession()
     session = sm_session.get_session()
 
-
-    node = getLocalNode('.')
+    print "Getting local root node"
+    node = getLocalNode('')
     if not node:
         #userObj = session.get(API_ORIGIN + '/api/v2/user/slushpupie',
         #        headers={'Accept': 'application/json'}).json()
         #nodeUri = userObj['Response']['User']['Uris']['Node']['Uri']
+        print "Getting remote root node"
         node = getRemoteNode('')
+        print "Saving local node"
         saveLocalNode('.',node)
 
     for root, dirs, files in os.walk('Photos'):
+        # Strip off the 'Photos/' part of the root path
         r = root[6:]
+        print "Getting node for '%s'" % (r)
         node = getNode(r)
         if not node:
             if len(files) > 0 and len(dirs) > 0:
                 print "You cant have directories with Images and Folders (%s)" % root
             elif len(files) > 0:
-                create_album(r)
+                if dryrun:
+                    print "Would create album %s, but in dryrun mode" % (r)
+                else:
+                    create_album(r)
             elif len(dirs) > 0:
-                create_folder(r)
+                if dryrun:
+                    print "Would create folder %s, but in dryrun mode" % (r)
+                else:
+                    create_folder(r)
             else:
                 print "Skipping empty directory "+r
 
         for f in files:
             _ignore, ext = os.path.splitext(f)
             if ext.lower() in known_types:
-                if not image_exist(r,f):
-                    image_upload(r,f)
+                if dryrun:
+                    print "Would upload image %s into %s, but in dryrun mode" % (f,r)
+                else:
+                    if not image_exist(r,f):
+                        if not image_upload(r,f):
+                            print "Error uploading"
 
 
 def image_upload(folder,image_name):
@@ -254,4 +270,7 @@ def getLocalNode(folder):
         return None
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dry-run','-n', dest='dryrun', action='store_true')
+    args = parser.parse_args()
+    main(args.dryrun)
