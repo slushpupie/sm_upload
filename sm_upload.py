@@ -39,7 +39,7 @@ API_ORIGIN = SmugMugSession.API_ORIGIN
 known_types = [".jpg", ".jpeg", ".gif", ".png"]
 #session
 
-def main(dryrun):
+def main(dryrun,limit):
     """This example interacts with its user through the console, but it is
     similar in principle to the way any non-web-based application can obtain an
     OAuth authorization from a user."""
@@ -58,38 +58,46 @@ def main(dryrun):
         print "Saving local node"
         saveLocalNode('.',node)
 
-    for root, dirs, files in os.walk('Photos'):
-        # Strip off the 'Photos/' part of the root path
-        r = root[6:]
-        print "Getting node for '%s'" % (r)
-        node = getNode(r)
-        if not node:
-            if len(files) > 0 and len(dirs) > 0:
-                print "You cant have directories with Images and Folders (%s)" % root
-            elif len(files) > 0:
-                if dryrun:
-                    print "Would create album %s, but in dryrun mode" % (r)
-                else:
-                    create_album(r)
-            elif len(dirs) > 0:
-                if dryrun:
-                    print "Would create folder %s, but in dryrun mode" % (r)
-                else:
-                    create_folder(r)
-            else:
-                print "Skipping empty directory "+r
+    if len(limit) < 1:
+        limit = ['Photos']
 
-        for f in files:
-            _ignore, ext = os.path.splitext(f)
-            if ext.lower() in known_types:
-
-                if not image_exist(r,f):
+    for basedir in limit:
+        if not basedir.startswith('Photos'):
+            basedir = 'Photos/' + basedir
+        print "Walking %s" % (basedir)
+        for root, dirs, files in os.walk(basedir):
+            # Strip off the 'Photos/' part of the root path
+            r = root[6:]
+            print "Getting node for '%s'" % (r)
+            node = getNode(r)
+            if not node:
+                if len(files) > 0 and len(dirs) > 0:
+                    print "You cant have directories with Images and Folders (%s)" % root
+                elif len(files) > 0:
                     if dryrun:
-                        print "Would upload image %s into %s, but in dryrun mode" % (f,r)
+                        print "Would create album %s, but in dryrun mode" % (r)
                     else:
-                        if not image_upload(r,f):
-                            print "Error uploading"
+                        if not create_album(r):
+                            print "Creating album %r failed?" % (r)
+                elif len(dirs) > 0:
+                    if dryrun:
+                        print "Would create folder %s, but in dryrun mode" % (r)
+                    else:
+                        if not create_folder(r):
+                            print "Create folder %r failed?" % (r)
+                else:
+                    print "Skipping empty directory "+r
 
+            for f in files:
+                _ignore, ext = os.path.splitext(f)
+                if ext.lower() in known_types:
+
+                    if not image_exist(r,f):
+                        if dryrun:
+                            print "Would upload image %s into %s, but in dryrun mode" % (f,r)
+                        else:
+                            if not image_upload(r,f):
+                                print "Error uploading"
 
 def image_upload(folder,image_name):
     global session
@@ -134,16 +142,16 @@ def image_exist(folder,image_name):
         next_page = page['Response']['Pages'].get('NextPage', None)
         images = page['Response']['AlbumImage']
         for image in images:
-            if image['FileName'] == image_name:
+            if not node['images'].get(image['FileName'], False):
                 i = {
                     'key': image['ImageKey'],
                     'uri': image['Uri']
                 }
-                node['images'][image_name] = i
-                saveLocalNode(folder,node)
-                return True
+                node['images'][image['FileName']] = i
 
-    return False
+    saveLocalNode(folder,node)
+
+    return node['images'].get(image_name, False)
 
 def parent(folder):
     if not folder:
@@ -273,5 +281,7 @@ def getLocalNode(folder):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run','-n', dest='dryrun', action='store_true')
+    parser.add_argument('limit', nargs='*')
     args = parser.parse_args()
-    main(args.dryrun)
+    print args
+    main(args.dryrun,args.limit)
