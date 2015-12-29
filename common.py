@@ -104,19 +104,3 @@ class SmugMugSession:
             print('Failed to open .sm_upload! Did you create it?')
             print('====================================================')
             sys.exit(1)
-
-    def add_auth_params(auth_url, access=None, permissions=None):
-        if access is None and permissions is None:
-            return auth_url
-        parts = urlsplit(auth_url)
-        query = parse_qsl(parts.query, True)
-        if access is not None:
-            query.append(('Access', access))
-        if permissions is not None:
-            query.append(('Permissions', permissions))
-        return urlunsplit((
-            parts.scheme,
-            parts.netloc,
-            parts.path,
-            urlencode(query, True),
-            parts.fragment))
