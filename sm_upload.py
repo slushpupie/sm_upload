@@ -66,6 +66,10 @@ def main(dryrun,limit):
             basedir = 'Photos/' + basedir
         print "Walking %s" % (basedir)
         for root, dirs, files in os.walk(basedir):
+            # Skip hidden dirs/files
+            files = [f for f in files if not f[0] == '.']
+            dirs[:] = [d for d in dirs if not d[0] == '.']
+
             # Strip off the 'Photos/' part of the root path
             r = root[6:]
             print "Getting node for '%s'" % (r)
