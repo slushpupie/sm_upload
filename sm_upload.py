@@ -39,7 +39,7 @@ API_ORIGIN = SmugMugSession.API_ORIGIN
 known_types = [".jpg", ".jpeg", ".gif", ".png"]
 #session
 
-def main(dryrun,limit):
+def main(dryrun,albums_only,limit):
     """This example interacts with its user through the console, but it is
     similar in principle to the way any non-web-based application can obtain an
     OAuth authorization from a user."""
@@ -97,7 +97,7 @@ def main(dryrun,limit):
                 if ext.lower() in known_types:
 
                     if not image_exist(r,f):
-                        if dryrun:
+                        if dryrun or albums_only:
                             print "Would upload image %s into %s, but in dryrun mode" % (f,r)
                         else:
                             if not image_upload(r,f):
@@ -181,7 +181,7 @@ def create_folder(folder):
     fname = base_name(folder)
     pnode = create_folder(parent(folder))
     if pnode:
-        print "Would create folder %s in node %s (%s)" % ( fname, pnode['id'], folder )
+        print "Create folder %s in node %s (%s)" % ( fname, pnode['id'], folder )
 
         response = session.post(API_ORIGIN + "/api/v2/node/%s!children" % (pnode['id']),
             headers={'Accept': 'application/json',
@@ -219,7 +219,7 @@ def create_album(folder):
     fname = base_name(folder)
     pnode = create_folder(parent(folder))
     if pnode:
-        print "Would create album %s in node %s (%s)" % ( fname, pnode['id'], folder )
+        print "Create album %s in node %s (%s)" % ( fname, pnode['id'], folder )
 
         response = session.post(API_ORIGIN + "/api/v2/node/%s!children" % (pnode['id']),
             headers={'Accept': 'application/json',
@@ -285,7 +285,8 @@ def getLocalNode(folder):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run','-n', dest='dryrun', action='store_true')
+    parser.add_argument('--albums-only','-a', dest='albums_only', action='store_true')
     parser.add_argument('limit', nargs='*')
     args = parser.parse_args()
     print args
-    main(args.dryrun,args.limit)
+    main(args.dryrun,args.albums_only,args.limit)
